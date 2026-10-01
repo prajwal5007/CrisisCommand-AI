@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}CrisisCommand AI{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=22">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="pulse"></span><strong>CRISIS<span>COMMAND</span> AI</strong><small>Emergency Coordination Control</small></div>
+  {% if current_user %}
+  <div class="userbox"><span>{{ current_user.name }}</span><b>{{ current_user.role.replace('_',' ') }}</b>
+    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="linkbtn">Logout</button></form>
+  </div>
+  {% endif %}
+</header>
+<nav class="modulebar"><a href="{{ url_for('user_module') }}">🚨 Report Emergency</a><a href="{{ url_for('hospital_register') }}">🏥 Hospital Registration</a><a href="{{ url_for('login') }}?mode=admin">🔐 Admin Login</a><a href="{{ url_for('login') }}?mode=hospital">🏥 Hospital Login</a>{% if current_user %}
+  {% if current_user.role == 'USER' %}<a href="{{ url_for('user_module') }}">User Module</a>{% endif %}
+  {% if current_user.role == 'ADMIN' %}<a href="{{ url_for('admin_module') }}">Admin / Human Control</a>{% endif %}
+  {% if current_user.role == 'HOSPITAL_OPERATOR' %}<a href="{{ url_for('hospital_module') }}">Hospital Module</a>{% endif %}{% endif %}<a href="{{ url_for('first_aid_page') }}">🩹 First Aid</a></nav>
+{% with messages=get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flashwrap">{% for category,msg in messages %}<div class="flash {{ category }}">{{ msg }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+<main>{% block content %}{% endblock %}</main>
+<footer>Safety boundary: coordination and decision support only. AI does not diagnose, prescribe, or independently make life-or-death decisions.</footer>
+<script>window.CSRF_TOKEN={{ csrf_token|tojson }};</script>
+<script>
+// Shared input validation for the demo: browser checks plus friendly messages.
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',e=>{
+    form.querySelectorAll('input,textarea,select').forEach(el=>el.value=typeof el.value==='string'?el.value.trim():el.value);
+    if(!form.checkValidity()){e.preventDefault();e.stopPropagation();form.reportValidity();}
+  }));
+});
+</script>
+
+{% block scripts %}{% endblock %}
+</body></html>

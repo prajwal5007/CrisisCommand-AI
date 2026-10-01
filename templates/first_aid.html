@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}First Aid Until Help Arrives | CrisisCommand AI{% endblock %}
+{% block content %}
+<div class="firstaid-hero">
+  <div><span class="eyebrow">FIRST AID • UNTIL HELP ARRIVES</span><h1>Immediate Safety Guidance</h1><p>Simple, conservative first-aid guidance while trained responders are on the way. This does not diagnose injuries or replace emergency medical care.</p></div>
+  <a class="emergency-call" href="tel:112">📞 Call 112</a>
+</div>
+<div class="grid two firstaid-grid">
+  <section class="card">
+    <h2>Choose the situation</h2>
+    <p class="aid-help">Select any situation below. The guidance panel updates immediately for the selected emergency.</p>
+    <div class="aid-buttons" id="aidButtons">
+      {% for key in first_aid_keys %}<button type="button" class="aid-btn" data-aid-key={{ key|tojson }}>{{ key }}</button>{% endfor %}
+    </div>
+    <div id="aidContent" class="aid-content" aria-live="polite"></div>
+  </section>
+  <section class="card safety-card">
+    <h2>🚨 Always remember</h2>
+    <ol>
+      <li><b>Check</b> the scene for safety.</li>
+      <li><b>Call</b> 112 for urgent emergency help in India.</li>
+      <li><b>Care</b> only within your level of training.</li>
+      <li>Do not delay professional rescue or medical care to perform first aid.</li>
+    </ol>
+    <div class="source-note">Guidance is based on first-aid principles from the American Red Cross and NHS; emergency number 112 is the Government of India's pan-India emergency response number.</div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const aidData={{ first_aid|tojson }};
+function escapeAid(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function loadAid(key){
+  const d=aidData[key] || aidData['__DEFAULT__'];
+  if(!d)return;
+  document.querySelectorAll('.aid-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.aidKey===key));
+  const content=document.getElementById('aidContent');
+  content.innerHTML='<div class="aid-selected">Selected: <b>'+escapeAid(key)+'</b></div><h3>'+escapeAid(d.title)+'</h3><ol>'+d.steps.map(s=>'<li>'+escapeAid(s)+'</li>').join('')+'</ol><div class="aid-warning">⚠ '+escapeAid(d.warning)+'</div>';
+}
+document.querySelectorAll('.aid-btn').forEach(btn=>btn.addEventListener('click',()=>loadAid(btn.dataset.aidKey)));
+const initialKey={{ (first_aid_keys[0] if first_aid_keys else '__DEFAULT__')|tojson }};
+loadAid(initialKey);
+</script>
+{% endblock %}

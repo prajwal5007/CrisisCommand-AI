@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block title %}Hospital Registration | CrisisCommand AI{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div class="login-shell">
+  <div class="login-card wide hospital-register-card">
+    <div class="brand large"><span class="pulse"></span><strong>CRISIS<span>COMMAND</span> AI</strong></div>
+    <div class="register-hero">
+      <div><span class="eyebrow">VERIFIED EMERGENCY RESOURCE NETWORK</span><h1>Hospital Registration</h1>
+      <p>Register your hospital and declare the resources currently available for emergency coordination. Admin approval is required before login.</p></div>
+      <div class="register-badge">🏥 Resource-ready hospital</div>
+    </div>
+    <form method="post" id="hospitalRegisterForm">
+      <section class="register-section"><h2>Hospital Information</h2><div class="grid two">
+        <label>Hospital name<input name="hospital_name" minlength="2" maxlength="120" required placeholder="City Care Hospital"></label>
+        <label>Contact number<input name="contact" minlength="7" maxlength="25" pattern="[0-9+()\-\s]{7,25}" required placeholder="080-12345678"></label>
+        <label>Official email<input type="email" name="email" required placeholder="control@hospital.com"></label>
+        <label>Password<input type="password" name="password" minlength="8" maxlength="12" title="Password must be 8–12 characters" required placeholder="8–12 characters"></label>
+        <label class="span-two">Locality / address <input id="hospitalLocation" name="location" required readonly placeholder="Select the hospital location on the map"></label>
+      </div></section>
+
+      <section class="register-section"><h2>📍 Hospital Location</h2>
+        <div class="location-choice"><b>Select the hospital location on the map.</b><small>Click the hospital location or use live GPS. The system automatically identifies the nearest locality and saves the coordinates internally.</small></div>
+        <div class="gpsbox"><div><b id="gpsStatus">Map location not selected</b><small id="gpsAccuracy">Click the map or use live GPS.</small></div><button type="button" class="ghost" id="gpsBtn">📍 Get Hospital GPS</button></div>
+        <div class="map-search-row">
+          <input id="hospitalLocationSearch" type="search" minlength="2" maxlength="200" placeholder="🔎 Search hospital locality, area, street or landmark">
+          <button type="button" class="ghost" id="hospitalLocationSearchBtn">Search</button>
+        </div>
+        <div id="hospitalLocationSearchResults" class="map-search-results" hidden></div>
+        <div id="hospitalLocationMap" class="location-picker-map"></div>
+        <input id="latitude" name="latitude" type="hidden" required><input id="longitude" name="longitude" type="hidden" required>
+        <div id="hospitalSelectedLocation" class="selected-location empty">No hospital location selected.</div>
+      </section>
+
+      <section class="register-section resource-registration"><div class="section-title-row"><div><h2>🚑 Emergency Resources Available Now</h2><p>Tell CrisisCommand AI what your hospital can currently provide. These units become individually trackable resources after registration.</p></div><span class="info-chip">Used by AI allocation</span></div>
+        <div class="resource-input-grid">
+          <label>🚑 Ambulances<input type="number" name="ambulance" min="0" max="100" value="0"></label>
+          <label>🩺 Medical teams<input type="number" name="medical_team" min="0" max="100" value="0"></label>
+          <label>🛟 Rescue teams<input type="number" name="rescue_team" min="0" max="100" value="0"></label>
+          <label>🏠 Shelter units<input type="number" name="shelter" min="0" max="100" value="0"></label>
+        </div>
+        <small class="field-note">You can change these quantities later from the Hospital Dashboard. Reserved or dispatched units cannot be removed until their current operation is complete.</small>
+      </section>
+
+      <section class="register-section"><div class="section-title-row"><div><h2>🛏️ Hospital Capacity</h2><p>These figures help coordinators understand receiving capacity. They can be updated whenever the situation changes.</p></div><span class="info-chip neutral">Update anytime</span></div>
+        <div class="resource-input-grid capacity-input-grid">
+          <label>🛏️ General beds<input type="number" name="general_beds" min="0" max="10000" value="0"></label>
+          <label>🫀 ICU beds<input type="number" name="icu_beds" min="0" max="10000" value="0"></label>
+          <label>🫁 Oxygen beds<input type="number" name="oxygen_beds" min="0" max="10000" value="0"></label>
+          <label>🚑 Trauma beds<input type="number" name="trauma_beds" min="0" max="10000" value="0"></label>
+          <label>👨‍⚕️ Doctors<input type="number" name="doctors" min="0" max="10000" value="0"></label>
+          <label>👩‍⚕️ Nurses<input type="number" name="nurses" min="0" max="10000" value="0"></label>
+          <label>🩸 Blood units<input type="number" name="blood_units" min="0" max="10000" value="0"></label>
+        </div>
+      </section>
+
+      <div class="registration-note">🔐 <b>Verified hospital data</b><br><span>Only your hospital operator can edit these values after approval. CrisisCommand AI uses the latest submitted availability during resource coordination and dynamic replanning.</span></div>
+      <button class="primary full" type="submit">🏥 Submit Hospital Registration</button>
+    </form>
+    <div class="login-links"><a href="{{ url_for('login') }}">Already verified? Login</a><a href="{{ url_for('user_module') }}">🚨 Report Emergency</a></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let hospitalMap=null,hospitalMarker=null,lastHospitalGeo='';
+const escH=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function hospitalLocality(lat,lon){
+  const key=Number(lat).toFixed(4)+','+Number(lon).toFixed(4); if(key===lastHospitalGeo)return; lastHospitalGeo=key;
+  const box=document.getElementById('hospitalSelectedLocation');
+  box.className='selected-location selected'; box.innerHTML='📍 <b>Finding locality…</b>';
+  try{const r=await fetch('/api/geocode/reverse?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon));const j=await r.json();const locality=j.locality||'Locality not identified';const display=j.display_name||`${lat.toFixed(6)}, ${lon.toFixed(6)}`;document.getElementById('hospitalLocation').value=locality+' — '+display;box.innerHTML=`📍 <b>${escH(locality)}</b><br><span>${escH(display)}</span><small>Coordinates: ${lat.toFixed(6)}, ${lon.toFixed(6)}</small>`;}catch(e){document.getElementById('hospitalLocation').value=`Hospital location: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;box.innerHTML=`📍 <b>Location selected</b><br><small>Locality lookup unavailable · ${lat.toFixed(6)}, ${lon.toFixed(6)}</small>`;}
+}
+function setHospitalLocation(lat,lon,source='Map',accuracy=null){
+  lat=Number(lat);lon=Number(lon);document.getElementById('latitude').value=lat.toFixed(6);document.getElementById('longitude').value=lon.toFixed(6);
+  document.getElementById('gpsStatus').textContent=source==='GPS'?'Live GPS captured':'Map location selected';
+  document.getElementById('gpsAccuracy').textContent=source==='GPS'&&accuracy!=null?'Accuracy: ±'+Math.round(accuracy)+' metres':'Click another point to change the hospital location.';
+  const box=document.getElementById('hospitalSelectedLocation');box.className='selected-location selected';box.innerHTML='📍 <b>Finding locality…</b>';
+  if(hospitalMarker)hospitalMarker.setLatLng([lat,lon]);else{hospitalMarker=L.marker([lat,lon],{draggable:true}).addTo(hospitalMap);hospitalMarker.on('dragend',()=>{const p=hospitalMarker.getLatLng();setHospitalLocation(p.lat,p.lng,'Map');});}
+  hospitalMap.setView([lat,lon],15);hospitalLocality(lat,lon);
+}
+async function searchHospitalLocation(){
+  const input=document.getElementById('hospitalLocationSearch'), results=document.getElementById('hospitalLocationSearchResults');
+  const q=input.value.trim();
+  if(q.length<2){results.hidden=false;results.innerHTML='<div class="empty">Type at least 2 characters to search.</div>';return;}
+  results.hidden=false; results.innerHTML='<div class="search-loading">🔎 Searching map…</div>';
+  try{
+    const r=await fetch('/api/geocode/search?q='+encodeURIComponent(q));
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Search failed');
+    results.innerHTML=j.results?.length?j.results.map((x,i)=>`<button type="button" class="map-search-result" data-index="${i}"><b>${escH(x.locality||'Location')}</b><span>${escH(x.display_name)}</span></button>`).join(''):'<div class="empty">No matching locations found.</div>';
+    results.querySelectorAll('.map-search-result').forEach((el,i)=>el.addEventListener('click',()=>{const x=j.results[i]; document.getElementById('hospitalLocationSearch').value=x.display_name; results.hidden=true; setHospitalLocation(x.lat,x.lon,'Search');}));
+  }catch(e){results.innerHTML='<div class="empty">Location search is temporarily unavailable. You can still click the map or use GPS.</div>';}
+}
+document.getElementById('hospitalLocationSearchBtn').addEventListener('click',searchHospitalLocation);
+document.getElementById('hospitalLocationSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchHospitalLocation();}});
+
+function initHospitalMap(){hospitalMap=L.map('hospitalLocationMap').setView([12.9716,77.5946],11);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(hospitalMap);hospitalMap.on('click',e=>setHospitalLocation(e.latlng.lat,e.latlng.lng,'Map'));}
+document.getElementById('gpsBtn').onclick=()=>{if(!navigator.geolocation){document.getElementById('gpsStatus').textContent='GPS unavailable';return;}document.getElementById('gpsStatus').textContent='Getting GPS...';navigator.geolocation.getCurrentPosition(p=>setHospitalLocation(p.coords.latitude,p.coords.longitude,'GPS',p.coords.accuracy),e=>{document.getElementById('gpsStatus').textContent='GPS unavailable';document.getElementById('gpsAccuracy').textContent=e.message;},{enableHighAccuracy:true,timeout:10000,maximumAge:0});};
+initHospitalMap();
+</script>
+{% endblock %}

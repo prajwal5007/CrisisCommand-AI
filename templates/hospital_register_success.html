@@ -1,0 +1,2 @@
+{% extends 'base.html' %}{% block title %}Registration Submitted | CrisisCommand AI{% endblock %}
+{% block content %}<div class="login-shell"><div class="login-card"><h1>Registration Submitted ✅</h1><p><b>{{ hospital_name }}</b> has been submitted for admin verification.</p><p>You will be able to log in only after the Admin verifies the hospital.</p><div class="login-links"><a href="{{ url_for('user_module') }}">🚨 Report Emergency</a><a href="{{ url_for('login') }}">🔐 Login</a></div></div></div>{% endblock %}

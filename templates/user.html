@@ -1,0 +1,346 @@
+{% extends 'base.html' %}
+{% block title %}Report Emergency | CrisisCommand AI{% endblock %}
+{% block content %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div class="public-hero"><div><span class="eyebrow">CRISISCOMMAND AI • PUBLIC SAFETY</span><h1>Report an Emergency. Help is already being coordinated.</h1><p>Share the situation and allow live GPS. AI assesses priority and resource needs while the command center coordinates verified hospitals.</p></div><a class="emergency-call" href="tel:112">📞 Emergency 112</a></div><div class="pagehead">
+  <div>
+    <span class="eyebrow">PUBLIC EMERGENCY REPORT</span>
+    <h1>Report an Emergency</h1>
+    <p>No account is required. Select what best describes the situation and allow the browser to provide live GPS.</p>
+  </div>
+  <div class="toolbar">
+    <a class="ghost" href="{{ url_for('hospital_register') }}">🏥 Hospital Registration</a>
+    <a class="ghost" href="{{ url_for('login') }}">🔐 Admin / Hospital Login</a>
+  </div>
+</div>
+<div class="grid two">
+<section class="card"><h2>Emergency Details</h2>
+<form id="crisisForm">
+  <div class="grid two">
+    <label>Emergency type / title
+      <select id="titleSelect" name="title_choice" required>
+        <option value="">Select emergency type</option>
+        <option>Road / Car Accident</option>
+        <option>Building Collapse</option>
+        <option>Fire / Explosion</option>
+        <option>Flood / Waterlogging</option>
+        <option>Medical Emergency</option>
+        <option>Industrial Accident</option>
+        <option>Missing / Trapped People</option>
+        <option>Other</option>
+      </select>
+      <input id="titleOther" name="title_other" class="conditional" placeholder="Type the emergency title" hidden>
+    </label>
+    <label>Affected people<input name="affected_people" type="number" min="1" max="100000" step="1" required placeholder="20"></label>
+  </div>
+
+  <label>What happened?
+    <select id="descriptionSelect" name="description_choice" required>
+      <option value="">Select a situation</option>
+      <option>Vehicle collision with injured people</option>
+      <option>Building or structure has collapsed</option>
+      <option>Fire, smoke or explosion reported</option>
+      <option>Flooding or people at risk from water</option>
+      <option>Person or group needs urgent medical assistance</option>
+      <option>Industrial/workplace accident</option>
+      <option>People are trapped and need rescue</option>
+      <option>Other</option>
+    </select>
+    <textarea id="descriptionOther" name="description_other" class="conditional" rows="4" placeholder="Describe what happened" hidden></textarea>
+  </label>
+
+  <div class="grid two">
+    <label>Contact information (required)<input name="contact_info" minlength="7" maxlength="25" pattern="[0-9+()\-\s]{7,25}" title="Enter a valid contact number" required></label>
+    
+  </div>
+
+  <h3>📍 Emergency Location</h3>
+  <div class="location-choice"><b>Select the emergency location directly on the map.</b><small>Click the map where the emergency is happening, or use Live GPS. The system will automatically identify and show the nearest locality.</small></div>
+  <div class="gpsbox">
+    <div><b id="gpsStatus">Map location not selected</b><small id="gpsAccuracy">Click the map or enable Live GPS.</small></div>
+    <button type="button" class="ghost" id="gpsBtn">📍 Enable Live GPS</button>
+  </div>
+  <div class="map-search-row">
+    <input id="locationSearch" type="search" minlength="2" maxlength="200" placeholder="🔎 Search locality, area, street or landmark (e.g. Electronic City, Bengaluru)">
+    <button type="button" class="ghost" id="locationSearchBtn">Search</button>
+  </div>
+  <div id="locationSearchResults" class="map-search-results" hidden></div>
+  <div id="locationPickerMap" class="location-picker-map"></div>
+  <input id="locationText" name="location_text" type="hidden" value="Map location selected">
+  <input id="latitude" name="latitude" type="hidden">
+  <input id="longitude" name="longitude" type="hidden">
+  <div id="selectedLocation" class="selected-location empty">No location selected. Click the map or enable GPS.</div>
+
+  <label>Additional information
+    <select id="notesSelect" name="notes_choice">
+      <option value="">Select if applicable</option>
+      <option>People are trapped or unable to move</option>
+      <option>Fire or heavy smoke is present</option>
+      <option>Road is blocked</option>
+      <option>Hazardous material / gas suspected</option>
+      <option>People need urgent medical attention</option>
+      <option>Ambulance or rescue access is difficult</option>
+      <option>Children or elderly people are involved</option>
+      <option>No additional information</option>
+      <option>Other</option>
+    </select>
+    <textarea id="notesOther" name="notes_other" class="conditional" rows="3" placeholder="Type any other important information" hidden></textarea>
+  </label>
+
+  <div class="auto-resource-box">
+    <b>🤖 Resources are estimated automatically</b>
+    <p>You do not need to choose ambulances, medical teams or rescue teams. CrisisCommand AI estimates the initial resource need from the emergency details. Admin approval and live hospital availability are still required before dispatch.</p>
+  </div>
+
+  <button class="primary full" id="submitBtn">🚨 Submit Emergency</button>
+  <div id="submissionResult" class="emergency-result" hidden></div>
+</form></section>
+
+<section class="card"><h2>📍 Track Your Report & Resources</h2><p>After submitting, save the incident ID. The tracker shows hospital responses, allocated resources and the latest known resource locations.</p><div class="statuslookup"><input id="statusId" type="number" min="1" step="1" placeholder="Incident ID"><button class="ghost" type="button" onclick="lookupStatus()">Check Status</button></div><div id="statusOut" class="status-result empty">No incident selected yet.</div><div id="trackingMap" class="tracking-map"></div><div class="safety"><b>Safety boundary</b><p>CrisisCommand AI coordinates resources. It does not diagnose patients or make independent medical/life-or-death decisions. Map positions are latest known coordinates and may not be live.</p></div></section>
+<section class="card firstaid-inline">
+  <div class="firstaid-head"><div><span class="eyebrow">UNTIL HELP ARRIVES</span><h2>🩹 First Aid Guidance</h2><p>Choose an emergency type to see conservative first-aid guidance while responders are on the way.</p></div><a class="ghost" href="{{ url_for('first_aid_page') }}">Open First Aid Guide</a></div>
+  <div id="inlineAid" class="aid-content"><div class="empty">Select an emergency type to see guidance.</div></div>
+</section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let watchId=null;
+const statusEl=document.getElementById('gpsStatus'), accuracyEl=document.getElementById('gpsAccuracy');
+const locationText=document.getElementById('locationText');
+let firstAidCache={};
+function renderAid(d){
+  const box=document.getElementById('inlineAid');
+  if(!box||!d)return;
+  box.innerHTML='<h3>'+d.title+'</h3><ol>'+d.steps.map(x=>'<li>'+x+'</li>').join('')+'</ol><div class="aid-warning">⚠ '+d.warning+'</div>';
+}
+async function loadAid(){
+  const title=document.getElementById('titleSelect').value;
+  const desc=document.getElementById('descriptionSelect').value;
+  if(!title)return;
+  const key=title+'|'+desc;
+  if(firstAidCache[key]){renderAid(firstAidCache[key]);return;}
+  try{
+    const r=await fetch('/api/first-aid?title='+encodeURIComponent(title)+'&description='+encodeURIComponent(desc));
+    const j=await r.json(); firstAidCache[key]=j; renderAid(j);
+  }catch(e){document.getElementById('inlineAid').innerHTML='<div class="empty">First-aid guidance could not be loaded. Call 112 for urgent help.</div>';}
+}
+document.getElementById('titleSelect').addEventListener('change',loadAid);
+document.getElementById('descriptionSelect').addEventListener('change',loadAid);
+
+function setupOther(selectId, otherId){
+  const select=document.getElementById(selectId), other=document.getElementById(otherId);
+  select.addEventListener('change',()=>{
+    const show=select.value==='Other';
+    other.hidden=!show;
+    other.required=show;
+    if(!show) other.value='';
+  });
+}
+setupOther('titleSelect','titleOther');
+setupOther('descriptionSelect','descriptionOther');
+setupOther('notesSelect','notesOther');
+
+let locationMap=null, locationMarker=null, lastGeocodeKey='';
+async function lookupLocality(lat,lon){
+  const key=Number(lat).toFixed(4)+','+Number(lon).toFixed(4);
+  if(key===lastGeocodeKey) return;
+  lastGeocodeKey=key;
+  const box=document.getElementById('selectedLocation');
+  try{
+    box.innerHTML='📍 <b>Selected location</b><br><span>Finding locality…</span>';
+    const r=await fetch('/api/geocode/reverse?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon));
+    const j=await r.json();
+    const locality=j.locality || 'Locality not identified';
+    const display=j.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    locationText.value=locality ? `${locality} — ${display}` : display;
+    box.innerHTML=`📍 <b>${esc(locality)}</b><br><span>${esc(display)}</span><small>Coordinates: ${lat.toFixed(6)}, ${lon.toFixed(6)}</small>`;
+  }catch(e){
+    locationText.value=`Map location: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    box.innerHTML=`📍 <b>Location selected</b><br><span>Locality lookup unavailable</span><small>Coordinates: ${lat.toFixed(6)}, ${lon.toFixed(6)}</small>`;
+  }
+}
+function setSelectedLocation(lat,lon,source='Map'){
+  lat=Number(lat); lon=Number(lon);
+  document.getElementById('latitude').value=lat.toFixed(6);
+  document.getElementById('longitude').value=lon.toFixed(6);
+  document.getElementById('locationText').value=`Map location: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+  statusEl.textContent=source==='GPS'?'Live GPS location selected':'Map location selected';
+  if(source!=='GPS') accuracyEl.textContent='Click another point to change the emergency location.';
+  const box=document.getElementById('selectedLocation');
+  box.className='selected-location selected';
+  box.innerHTML=`📍 <b>Selected location</b><br><span>Finding locality…</span>`;
+  if(locationMap){
+    if(locationMarker) locationMarker.setLatLng([lat,lon]);
+    else locationMarker=L.marker([lat,lon],{draggable:true}).addTo(locationMap);
+    locationMarker.off('dragend').on('dragend',()=>{const p=locationMarker.getLatLng();setSelectedLocation(p.lat,p.lng,'Map')});
+    locationMap.setView([lat,lon],15);
+  }
+  lookupLocality(lat,lon);
+}
+async function searchMapLocation(){
+  const input=document.getElementById('locationSearch'), results=document.getElementById('locationSearchResults');
+  const q=input.value.trim();
+  if(q.length<2){results.hidden=false;results.innerHTML='<div class="empty">Type at least 2 characters to search.</div>';return;}
+  results.hidden=false; results.innerHTML='<div class="search-loading">🔎 Searching map…</div>';
+  try{
+    const r=await fetch('/api/geocode/search?q='+encodeURIComponent(q));
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Search failed');
+    results.innerHTML=j.results?.length?j.results.map((x,i)=>`<button type="button" class="map-search-result" data-index="${i}"><b>${esc(x.locality||'Location')}</b><span>${esc(x.display_name)}</span></button>`).join(''):'<div class="empty">No matching locations found.</div>';
+    results.querySelectorAll('.map-search-result').forEach((el,i)=>el.addEventListener('click',()=>{const x=j.results[i]; document.getElementById('locationSearch').value=x.display_name; results.hidden=true; setSelectedLocation(x.lat,x.lon,'Search');}));
+  }catch(e){results.innerHTML='<div class="empty">Location search is temporarily unavailable. You can still click the map or use GPS.</div>';}
+}
+document.getElementById('locationSearchBtn').addEventListener('click',searchMapLocation);
+document.getElementById('locationSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchMapLocation();}});
+
+function initLocationPicker(){
+  if(typeof L==='undefined') return;
+  locationMap=L.map('locationPickerMap').setView([12.9716,77.5946],11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(locationMap);
+  locationMap.on('click',e=>setSelectedLocation(e.latlng.lat,e.latlng.lng,'Map'));
+}
+function startGPS(){
+  if(!navigator.geolocation){statusEl.textContent='GPS unavailable';return;}
+  statusEl.textContent='Requesting GPS permission...';
+  watchId=navigator.geolocation.watchPosition(pos=>{
+    const lat=pos.coords.latitude, lon=pos.coords.longitude;
+    accuracyEl.textContent='Accuracy: ±'+Math.round(pos.coords.accuracy)+' metres';
+    setSelectedLocation(lat,lon,'GPS');
+  },err=>{statusEl.textContent='GPS unavailable — select the map location';accuracyEl.textContent=err.message;},{enableHighAccuracy:true,maximumAge:5000,timeout:10000});
+}
+document.getElementById('gpsBtn').addEventListener('click',startGPS);
+initLocationPicker();
+
+function esc(value){
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+function resourceRows(needs){
+  const icons={AMBULANCE:'🚑',MEDICAL_TEAM:'🩺',RESCUE_TEAM:'🛟',FIRE_UNIT:'🚒',POLICE:'👮'};
+  return Object.entries(needs||{}).map(([k,v])=>`<div class="resource-mini"><span>${icons[k]||'📦'} ${esc(k.replaceAll('_',' '))}</span><b>${esc(v)}</b></div>`).join('');
+}
+function renderSubmission(j){
+  const box=document.getElementById('submissionResult');
+  const sev=(j.severity||'SUBMITTED').toUpperCase();
+  const sevClass=sev.toLowerCase();
+  const replan=j.replan_triggered ? '<span class="result-pill ai">🤖 Dynamic replanning triggered</span>' : '<span class="result-pill">✓ Coordination workflow started</span>';
+  box.hidden=false;
+  box.innerHTML=`
+    <div class="result-success"><span>✓</span><div><strong>Emergency reported successfully</strong><small>Incident #${esc(j.incident_id)} has entered the CrisisCommand coordination workflow.</small></div></div>
+    <div class="result-grid">
+      <div><small>Incident ID</small><b>#${esc(j.incident_id)}</b></div>
+      <div><small>Priority</small><b class="severity ${esc(sevClass)}">${esc(sev)}</b></div>
+      <div><small>Status</small><b>SUBMITTED</b></div>
+    </div>
+    <div class="result-section"><h3>🤖 AI Resource Assessment</h3><p class="result-muted">Initial resource needs were estimated automatically from the reported situation. Final dispatch remains under the command-center workflow.</p><div class="resource-mini-grid">${resourceRows(j.resource_needs)}</div></div>
+    <div class="result-actions">${replan}<span class="result-pill">👤 Human approval required before dispatch</span></div>
+    <div class="result-message">${esc(j.message||'Your emergency has been submitted and is being coordinated.')}</div>`;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+let trackingMap=null;
+function renderTrackingMap(j){
+  if(typeof L==='undefined')return;
+  const mapEl=document.getElementById('trackingMap'); if(!mapEl)return;
+  if(!trackingMap){trackingMap=L.map(mapEl).setView([12.9716,77.5946],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(trackingMap);}
+  trackingMap.eachLayer(layer=>{if(layer instanceof L.Marker || layer instanceof L.CircleMarker)trackingMap.removeLayer(layer)});
+  const points=[];
+  if(j.latitude&&j.longitude){L.marker([j.latitude,j.longitude]).addTo(trackingMap).bindPopup('<b>🚨 Incident #'+esc(j.id||j.incident_id)+'</b><br>'+esc(j.title||'Emergency')).openPopup();points.push([j.latitude,j.longitude]);}
+  (j.allocations||[]).forEach(a=>{if(a.latitude&&a.longitude){const m=L.marker([a.latitude,a.longitude]).addTo(trackingMap).bindPopup('<b>🚑 '+esc(a.label)+'</b><br>'+esc(a.resource_type)+'<br>'+esc(a.state)+'<br>'+esc(a.hospital_name));points.push([a.latitude,a.longitude]);}});
+  if(points.length>1)trackingMap.fitBounds(points,{padding:[30,30]}); else if(points.length)trackingMap.setView(points[0],13);
+}
+function renderStatus(j){
+  const box=document.getElementById('statusOut');
+  if(!j || j.error){box.className='status-result error-result';box.textContent=j?.error||'Incident not found.';return;}
+  const sev=(j.severity||'UNKNOWN').toUpperCase();
+  const resources=typeof j.required_resources==='string'?(()=>{try{return JSON.parse(j.required_resources)}catch(e){return {}}})():(j.required_resources||{});
+  const reqs=j.hospital_requests||[];
+  const allocs=j.allocations||[];
+  const responseHtml=reqs.map(r=>`<div class="track-row"><span>🏥 ${esc(r.hospital_name)}</span><b>${esc(r.response_status)}</b><small>${esc(r.distance_km)} km</small></div>`).join('')||'<div class="empty">Nearby hospital requests are being coordinated.</div>';
+  const allocHtml=allocs.map(a=>`<div class="track-row"><span>🚑 ${esc(a.label)} · ${esc(a.hospital_name)}</span><b>${esc(a.status)}</b><small>${esc(a.latitude)}, ${esc(a.longitude)}</small></div>`).join('')||'<div class="empty">No resources allocated yet. Human approval is required before dispatch.</div>';
+  const notes=(j.notifications||[]).map(n=>`<div class="notification ${String(n.priority||'NORMAL').toLowerCase()}"><b>${esc(n.title)}</b><span>${esc(n.message)}</span></div>`).join('');
+  const anyHospitalResponse=reqs.some(r=>['APPROVED','PARTIAL','FULFILLED','COMPLETED'].includes(r.response_status));
+  const anyAllocation=allocs.length>0;
+  const anyReserved=allocs.some(a=>['RESERVED','DISPATCHED','COMPLETED'].includes(a.status));
+  const anyDispatched=allocs.some(a=>['DISPATCHED','COMPLETED'].includes(a.status) || ['DISPATCHED','AVAILABLE'].includes(a.state));
+  const allAllocationsCompleted=allocs.length>0 && allocs.every(a=>a.status==='COMPLETED');
+  const incidentCompleted=String(j.status||'').toUpperCase()==='RESOLVED' || allAllocationsCompleted;
+  const incidentRejected=String(j.status||'').toUpperCase()==='REJECTED' || String(j.human_decision||'').toUpperCase()==='REJECTED';
+  const completeText=incidentCompleted?'Completed successfully.':incidentRejected?'The incident was rejected by the authorizer.':'Waiting for the next workflow action.';
+  const steps=incidentCompleted ? [
+    ['Emergency reported',true,'Emergency report received.'],
+    ['Human authorization',true,'Authorized by the command center.'],
+    ['AI resource requirement',true,'AI identified the required resource types and quantities.'],
+    ['Nearby hospitals requested',true,'Requirements were sent to nearby verified hospitals.'],
+    ['Hospital response',true,'Hospital resource availability was confirmed.'],
+    ['AI allocation',true,'AI allocated the available resources.'],
+    ['Human allocation approval',true,'The authorized human approved the allocation.'],
+    ['Hospital notified / dispatch',true,'The receiving hospital was notified and the resource was dispatched.'],
+    ['Resource tracking',true,'The operation is complete and the resource has returned to available status.']
+  ] : [
+    ['Emergency reported',true,'Your report was received.'],
+    ['Human authorization',j.human_decision==='APPROVED',incidentRejected?'The incident was rejected by the authorizer.':'Waiting for authorized human approval.'],
+    ['AI resource requirement',Boolean(resources && Object.keys(resources).length), 'AI identified the resource types and quantities needed.'],
+    ['Nearby hospitals requested',reqs.length>0,'Requirements were sent to nearby verified hospitals.'],
+    ['Hospital response',anyHospitalResponse,'Waiting for hospitals to confirm available resources.'],
+    ['AI allocation',anyAllocation,'AI allocation is waiting for confirmed resources and human review.'],
+    ['Human allocation approval',anyReserved,anyAllocation?'Allocation is pending, approved, dispatched, or completed.':'Not reached yet.'],
+    ['Hospital notified / dispatch',anyDispatched,anyReserved?'Hospital received the allocation details.':'Not reached yet.'],
+    ['Resource tracking',anyDispatched,'Latest known GPS position is shown on the map.']
+  ];
+  const timeline='<div class="track-timeline">'+steps.map((s,i)=>`<div class="track-step ${s[1]?'done':''}"><span class="track-dot">${s[1]?'✓':i+1}</span><div><b>${esc(s[0])}</b><small>${esc(s[2])}</small></div></div>`).join('')+'</div>';
+  box.className='status-result';
+  box.innerHTML=`<div class="status-head"><div><small>INCIDENT</small><h3>#${esc(j.id||j.incident_id||'')}</h3></div><span class="status-badge">${esc(j.status||'UNKNOWN')}</span></div>
+    ${incidentCompleted?'<div class="completion-banner">✅ <strong>Emergency coordination completed</strong><span>All required workflow stages, allocation, dispatch and operation completion have been recorded.</span></div>':''}
+    <div class="status-grid"><div><small>Priority</small><b class="severity ${esc(sev.toLowerCase())}">${esc(sev)}</b></div><div><small>Affected people</small><b>${esc(j.affected_people??'—')}</b></div><div><small>Location</small><b>${esc(j.location_text||'—')}</b></div></div>
+    <div class="status-resources"><small>STEP-BY-STEP COORDINATION</small>${timeline}<div class="status-resources"><small>AI RESOURCE REQUIREMENT</small><div class="resource-mini-grid">${resourceRows(resources)}</div></div>
+    <div class="status-resources"><small>NEARBY HOSPITAL RESPONSES</small>${responseHtml}</div>
+    <div class="status-resources"><small>ALLOCATED / DISPATCHED RESOURCES</small>${allocHtml}</div></div>${notes}`;
+  renderTrackingMap(j);
+}
+document.getElementById('crisisForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=document.getElementById('submitBtn');
+  const box=document.getElementById('submissionResult');
+  btn.disabled=true; btn.textContent='⏳ Coordinating emergency...';
+  box.hidden=false; box.className='emergency-result loading-result'; box.innerHTML='<div class="loading-row"><span class="spinner"></span><div><strong>Submitting emergency securely</strong><small>AI is assessing the situation and starting the coordination workflow.</small></div></div>';
+  try{
+    const f=new FormData(e.target), body=Object.fromEntries(f.entries());
+    body.title=body.title_choice==='Other'?body.title_other:body.title_choice;
+    body.description=body.description_choice==='Other'?body.description_other:body.description_choice;
+    body.additional_notes=body.notes_choice==='Other'?body.notes_other:(body.notes_choice||'');
+    body.affected_people=Number(body.affected_people);
+    body.latitude=body.latitude?Number(body.latitude):''; body.longitude=body.longitude?Number(body.longitude):'';
+    delete body.title_choice; delete body.title_other; delete body.description_choice; delete body.description_other; delete body.notes_choice; delete body.notes_other;
+    const r=await fetch('/user/incidents',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':window.CSRF_TOKEN},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Emergency could not be submitted.');
+    if(j.first_aid) renderAid(j.first_aid);
+    document.getElementById('statusId').value=j.incident_id;
+    renderSubmission(j);
+    renderStatus({id:j.incident_id,status:'SUBMITTED',severity:j.severity,affected_people:body.affected_people,location_text:body.location_text,required_resources:j.resource_needs});
+    // Clear the report form so the page is immediately ready for the next emergency.
+    if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+    e.target.reset();
+    document.getElementById('titleOther').hidden=true; document.getElementById('descriptionOther').hidden=true; document.getElementById('notesOther').hidden=true;
+    document.getElementById('titleOther').required=false; document.getElementById('descriptionOther').required=false; document.getElementById('notesOther').required=false;
+    document.getElementById('latitude').value=''; document.getElementById('longitude').value='';
+    locationText.value='Map location selected';
+    lastGeocodeKey='';
+    document.getElementById('gpsStatus').textContent='Map location not selected';
+    document.getElementById('gpsAccuracy').textContent='Click the map or enable Live GPS.';
+    const selected=document.getElementById('selectedLocation'); selected.className='selected-location empty'; selected.textContent='No location selected. Click the map or enable GPS.';
+    if(locationMarker && locationMap){ locationMap.removeLayer(locationMarker); locationMarker=null; }
+    document.getElementById('inlineAid').innerHTML='<div class="empty">Select an emergency type to see guidance.</div>';
+  }catch(err){
+    box.className='emergency-result error-result'; box.hidden=false; box.innerHTML=`<div class="result-error">⚠ <div><strong>Emergency submission failed</strong><small>${esc(err.message)}</small><br><a href="tel:112">📞 Call 112 for immediate emergency assistance</a></div></div>`;
+  }finally{btn.disabled=false;btn.textContent='🚨 Submit Emergency';}
+});
+async function lookupStatus(){
+  const id=document.getElementById('statusId').value;if(!id)return;
+  const box=document.getElementById('statusOut'); box.className='status-result loading-result'; box.innerHTML='<div class="loading-row"><span class="spinner"></span><small>Checking incident status...</small></div>';
+  try{const r=await fetch('/api/public/incidents/'+encodeURIComponent(id)); const j=await r.json(); renderStatus(j);}
+  catch(e){box.className='status-result error-result';box.textContent='Unable to check status right now.';}
+}
+</script>
+{% endblock %}
+
+<script>setInterval(()=>{const id=document.getElementById('statusId')?.value;if(id)lookupStatus()},15000);</script>

@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}Hospital Dashboard | CrisisCommand AI{% endblock %}
+{% block content %}
+<div class="pagehead hospital-pagehead"><div><span class="eyebrow">MODULE 03 · HOSPITAL CONTROL</span><h1>{{ current_user.organization_name }}</h1><p>Maintain your hospital's current emergency capacity. CrisisCommand AI uses these values during allocation and dynamic replanning.</p></div><div class="toolbar"><a class="ghost" href="#hospital-notifications">🔔 Notifications</a><a class="ghost" href="#hospital-plan">🤖 Active Plan</a><span class="verified-mark">✓ VERIFIED HOSPITAL</span></div></div>
+
+<section class="hospital-live-banner"><div><b>🔄 Resource availability is operator-controlled</b><span>Update your inventory whenever ambulances, teams, beds or clinical capacity changes.</span></div><span class="live-dot">● LIVE DATA</span></section>
+
+<div class="grid two hospital-dashboard-grid">
+  <section class="card"><div class="section-title-row"><div><h2>🚑 Emergency Resource Inventory</h2><p>Track the units that the AI allocator can coordinate.</p></div><span class="info-chip">AI allocation</span></div>
+    <div class="resource-summary-grid">
+      {% for key,label,icon in [('AMBULANCE','Ambulances','🚑'),('MEDICAL_TEAM','Medical Teams','🩺'),('RESCUE_TEAM','Rescue Teams','🛟'),('SHELTER','Shelter Units','🏠')] %}
+      {% set rs=resource_summary[key] %}
+      <div class="resource-summary-card"><div class="summary-icon">{{icon}}</div><div><b>{{rs.total}}</b><span>{{label}}</span></div><small><strong>{{rs.available}}</strong> available · {{rs.reserved}} reserved · {{rs.dispatched}} dispatched</small></div>
+      {% endfor %}
+    </div>
+    <div class="inventory-editor">
+      <div class="section-title-row"><div><h3>Edit registered units</h3><p>Increase or decrease the total number of emergency units.</p></div></div>
+      <div class="resource-input-grid compact">
+        <label>Ambulances<input id="inv_ambulance" type="number" min="0" max="100" value="{{resource_summary['AMBULANCE']['total']}}"></label>
+        <label>Medical teams<input id="inv_medical_team" type="number" min="0" max="100" value="{{resource_summary['MEDICAL_TEAM']['total']}}"></label>
+        <label>Rescue teams<input id="inv_rescue_team" type="number" min="0" max="100" value="{{resource_summary['RESCUE_TEAM']['total']}}"></label>
+        <label>Shelter units<input id="inv_shelter" type="number" min="0" max="100" value="{{resource_summary['SHELTER']['total']}}"></label>
+      </div>
+      <button class="primary" onclick="updateInventory()">💾 Update Emergency Resources</button>
+    </div>
+  </section>
+
+  <section class="card"><div class="section-title-row"><div><h2>🛏️ Hospital Capacity</h2><p>Current receiving and clinical capacity.</p></div><span class="info-chip neutral">Operator editable</span></div>
+    <div class="capacity-editor-grid">
+      <label>General beds<input id="general_beds" type="number" min="0" max="10000" value="{{capacity.general_beds}}"></label>
+      <label>ICU beds<input id="icu_beds" type="number" min="0" max="10000" value="{{capacity.icu_beds}}"></label>
+      <label>Oxygen beds<input id="oxygen_beds" type="number" min="0" max="10000" value="{{capacity.oxygen_beds}}"></label>
+      <label>Trauma beds<input id="trauma_beds" type="number" min="0" max="10000" value="{{capacity.trauma_beds}}"></label>
+      <label>Doctors<input id="doctors" type="number" min="0" max="10000" value="{{capacity.doctors}}"></label>
+      <label>Nurses<input id="nurses" type="number" min="0" max="10000" value="{{capacity.nurses}}"></label>
+      <label>Blood units<input id="blood_units" type="number" min="0" max="10000" value="{{capacity.blood_units}}"></label>
+    </div>
+    <button class="primary" onclick="updateCapacity()">💾 Save Hospital Capacity</button>
+    <div class="ai-usage-note">🤖 <b>AI usage:</b> the latest emergency resource availability is used when the control room scores resources, checks shortages and creates replanning proposals.</div>
+  </section>
+</div>
+
+<section class="card"><div class="section-title-row"><div><h2>Resource Unit Status</h2><p>Individual emergency units remain state-controlled for dispatch coordination.</p></div></div>
+{% for r in resources %}<div class="resource"><div><b>{{r.label}}</b><span>{{r.resource_type}} · {{r.latitude}}, {{r.longitude}}</span></div><div class="actions"><select onchange="setState({{r.id}},this.value)"><option {% if r.state=='AVAILABLE' %}selected{% endif %}>AVAILABLE</option><option {% if r.state=='UNAVAILABLE' %}selected{% endif %}>UNAVAILABLE</option><option {% if r.state=='MAINTENANCE' %}selected{% endif %}>MAINTENANCE</option><option {% if r.state=='RESERVED' %}selected{% endif %}>RESERVED</option><option {% if r.state=='DISPATCHED' %}selected{% endif %}>DISPATCHED</option></select>{% if r.state in ['RESERVED','DISPATCHED'] %}<button class="ghost tiny" onclick="updateResourceGPS({{r.id}})">📍 Update GPS</button>{% endif %}</div></div>{% else %}<div class="empty">No emergency resources registered.</div>{% endfor %}
+</section>
+
+
+<section class="card hospital-plan-card" id="hospital-plan"><div class="section-title-row"><div><span class="eyebrow">AI RESPONSE PLAN</span><h2>🤖 Latest Plan for This Hospital</h2><p>When the command center runs the plan, resources assigned to this hospital appear here with the incident destination and dispatch instructions.</p></div>{% if hospital_plan %}<span class="plan-live">● PLAN v{{hospital_plan.version}}</span>{% endif %}</div>
+{% if hospital_plan_items %}{% for p in hospital_plan_items %}<div class="hospital-plan-item"><div><b>#{{p.incident_id}} {{p.title}}</b><span><span class="badge {{p.severity|lower}}">{{p.severity}}</span> · Destination: {{p.location_text}}</span><small>{{p.reason}}</small></div><div class="plan-resource"><strong>{{p.label or 'Shortage'}}</strong><span>{{p.resource_type or p.action}} · {{p.action}}</span>{% if p.resource_id %}<small>Resource #{{p.resource_id}} · State: {{p.state}}</small>{% endif %}</div></div>{% endfor %}{% elif hospital_plan %}<div class="empty">The latest plan does not currently assign a resource from this hospital.</div>{% else %}<div class="empty">No response plan has been generated yet.</div>{% endif %}</section>
+
+<section class="card"><div class="section-title-row"><div><h2>🚨 Emergency Requests</h2><p>Nearby incidents ask your hospital to confirm exactly what it can provide. Accept with quantities, partially accept, or reject.</p></div><span class="info-chip">Hospital response</span></div>
+{% for q in requests %}<div class="request-card"><div class="request-head"><div><b>{{q.title}}</b><span class="badge {{q.severity|lower}}">{{q.severity}}</span><small>📍 {{q.location_text}} · {{q.distance_km}} km away</small></div><span class="state {{q.response_status|lower}}">{{q.response_status}}</span></div>
+  <div class="request-body"><div><small>CONTROL ROOM REQUESTED</small><div class="resource-mini-grid">{% for key,val in q.requested_resources.items() %}<span class="resource-mini"><b>{{key.replace('_',' ')}}</b> {{val}}</span>{% endfor %}</div></div>
+  {% if q.response_status=='CONTACTED' %}<div class="hospital-response-editor"><small>WHAT CAN YOUR HOSPITAL PROVIDE?</small><div class="resource-input-grid compact">{% for key,val in q.requested_resources.items() %}<label>{{key.replace('_',' ')}}<input id="req_{{q.id}}_{{key}}" type="number" min="0" max="{{val}}" value="0"></label>{% endfor %}</div><div class="actions"><button class="green tiny" onclick="respondRequest({{q.id}},{{q.hospital_id}},'ACCEPT')">✓ Accept / Offer Resources</button><button class="red tiny" onclick="respondRequest({{q.id}},{{q.hospital_id}},'REJECT')">✕ Reject Request</button></div></div>
+  {% elif q.response_data %}<div class="response-confirmed"><b>Hospital response</b><span>{{q.response_data.get('message','Resources confirmed for this request.')}}</span><small>Offered: {{q.response_data.get('offered_resources',{})}}</small></div>{% endif %}</div></div>{% else %}<div class="empty">No hospital requests.</div>{% endfor %}
+</section>
+
+<section class="card" id="hospital-notifications"><div class="section-title-row"><div><h2>🔔 Command Center Notifications <span id="notificationCount" class="notification-count"></span></h2><p>AI allocation notices are prioritized according to incident severity. New approved allocations appear here automatically.</p></div></div><div id="hospital-notification-list">{% for n in notifications %}<div class="notification {{n.priority|lower}}"><span class="notification-icon">{% if n.priority=='CRITICAL' %}🚨{% elif n.priority=='HIGH' %}⚠️{% else %}🔔{% endif %}</span><div><b>{{n.title}}</b><span>{{n.message}}</span><small>{{n.created_at}} · {{n.priority}}</small></div></div>{% else %}<div class="empty">No notifications yet.</div>{% endfor %}</div></section>
+
+<section class="card"><h2>Approved Dispatches</h2>{% for a in allocations %}<div class="approval"><div><b>{{a.title}}</b><span>{{a.label}} · {{a.resource_type}} · {{a.state}}</span><small>Current GPS: {{a.latitude}}, {{a.longitude}}</small></div>{% if a.status=='RESERVED' %}<button class="green tiny" onclick="dispatchResource({{a.id}},{{current_user.organization_id}})">Confirm Dispatch</button>{% elif a.status=='DISPATCHED' %}<span class="state dispatched">DISPATCHED</span><button class="ghost tiny" onclick="completeResource({{a.id}},{{current_user.organization_id}})">✓ Mark Operation Complete</button>{% else %}<span class="state">{{a.status}}</span>{% endif %}</div>{% else %}<div class="empty">No approved dispatches for this hospital.</div>{% endfor %}</section>
+<div id="hospitalToast" class="hospital-toast" hidden></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function toast(message,ok=true){const el=document.getElementById('hospitalToast');el.hidden=false;el.className='hospital-toast '+(ok?'ok':'bad');el.textContent=message;setTimeout(()=>el.hidden=true,3200)}
+async function apiPost(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':window.CSRF_TOKEN},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data}
+async function updateCapacity(){try{const keys=['general_beds','icu_beds','oxygen_beds','trauma_beds','doctors','nurses','blood_units'];const body=Object.fromEntries(keys.map(k=>[k,document.getElementById(k).value]));const data=await apiPost('/api/hospital/capacity',body);toast('✓ '+data.message);setTimeout(()=>location.reload(),900)}catch(e){toast('✕ '+e.message,false)}}
+async function updateInventory(){try{const body={ambulance:document.getElementById('inv_ambulance').value,medical_team:document.getElementById('inv_medical_team').value,rescue_team:document.getElementById('inv_rescue_team').value,shelter:document.getElementById('inv_shelter').value};const data=await apiPost('/api/hospital/resource-inventory',body);toast('✓ '+data.message);setTimeout(()=>location.reload(),900)}catch(e){toast('✕ '+e.message,false)}}
+async function setState(id,state){try{const data=await apiPost('/api/resources/'+id+'/status',{state});toast('✓ Resource status updated');setTimeout(()=>location.reload(),500)}catch(e){toast('✕ '+e.message,false)}}
+async function respondRequest(id,hid,decision){
+  let body={decision};
+  if(decision==='REJECT'){const reason=prompt('Why is the hospital rejecting this request?');if(reason===null)return;body.reason=reason;}
+  else {
+    body.resources={};
+    document.querySelectorAll('[id^="req_'+id+'_"]').forEach(el=>{body.resources[el.id.split('_').slice(2).join('_')]=Number(el.value||0)});
+    if(!Object.values(body.resources).some(v=>v>0)){toast('✕ Please offer at least one resource',false);return;}
+  }
+  try{const data=await apiPost('/api/hospitals/'+hid+'/requests/'+id+'/respond',body);toast('✓ Hospital response submitted: '+data.status.toUpperCase());setTimeout(()=>location.reload(),700)}catch(e){toast('✕ '+e.message,false)}
+}
+async function updateResourceGPS(id){
+  if(!navigator.geolocation){toast('✕ GPS is unavailable in this browser',false);return;}
+  navigator.geolocation.getCurrentPosition(async pos=>{try{await apiPost('/api/hospitals/{{current_user.organization_id}}/resources/'+id+'/location',{latitude:pos.coords.latitude,longitude:pos.coords.longitude});toast('✓ Resource GPS updated');setTimeout(()=>location.reload(),500)}catch(e){toast('✕ '+e.message,false)}},()=>toast('✕ GPS permission was not granted',false),{enableHighAccuracy:true,timeout:10000,maximumAge:5000});
+}
+async function dispatchResource(id,hid){if(!confirm('Confirm that this selected resource is being dispatched?'))return;try{await apiPost('/api/hospitals/'+hid+'/allocations/'+id+'/dispatch',{});toast('✓ Dispatch confirmed');setTimeout(()=>location.reload(),600)}catch(e){toast('✕ Unable to confirm dispatch: '+e.message,false)}}
+async function completeResource(id,hid){if(!confirm('Mark this resource operation complete? The resource will become AVAILABLE and the incident will be resolved when no active allocations remain.'))return;try{await apiPost('/api/hospitals/'+hid+'/allocations/'+id+'/complete',{});toast('✓ Operation completed');setTimeout(()=>location.reload(),600)}catch(e){toast('✕ Unable to complete operation: '+e.message,false)}}
+async function refreshNotifications(){
+  try{const r=await fetch('/api/hospital/notifications'); if(!r.ok)return; const data=await r.json(); const box=document.getElementById('hospital-notification-list'); if(box){box.innerHTML=data.notifications.length?data.notifications.map(n=>`<div class=\"notification ${String(n.priority||'NORMAL').toLowerCase()}\"><span class=\"notification-icon\">${n.priority==='CRITICAL'?'🚨':n.priority==='HIGH'?'⚠️':'🔔'}</span><div><b>${n.title}</b><span>${n.message}</span><small>${n.created_at} · ${n.priority}</small></div></div>`).join(''):'<div class=\"empty\">No notifications yet.</div>';} const c=document.getElementById('notificationCount'); if(c)c.textContent=data.unread?` ${data.unread} new`:'';}catch(e){}
+}
+refreshNotifications(); setInterval(refreshNotifications,5000);
+</script>
+{% endblock %}

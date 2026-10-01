@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}Admin Control Room | CrisisCommand AI{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div class="admin-layout">
+<button type="button" class="admin-sidebar-toggle" id="adminSidebarToggle">☰ Command Center</button>
+<div class="admin-sidebar-backdrop" id="adminSidebarBackdrop"></div>
+<aside class="admin-sidebar" id="adminSidebar">
+  <div class="sidebar-brand">COMMAND CENTER</div>
+  <a href="#overview">◉ Overview</a>
+  <a href="#crisis-approval" class="sidebar-alert">🛡️ Crisis Approval <span>{{ stats.incident_approvals }}</span></a>
+  <a href="#hospital-responses">🏥 Hospital Responses</a>
+  <a href="#allocation-approval" class="sidebar-alert">👤 Allocation Approval <span>{{ stats.approvals }}</span></a>
+  <a href="#hospital-allocations">🏥 Hospital Allocations</a>
+  <a href="#active-plan">🤖 Active Plan</a>
+  <a href="#resources">🚑 Resources</a>
+  <a href="#map">🗺️ Live Map</a>
+  <a href="#audit">📋 Audit Trail</a>
+</aside>
+<main class="admin-main">
+<div class="pagehead" id="overview"><div><span class="eyebrow">MODULE 02 · ADMIN / HUMAN CONTROL ROOM</span><h1>Command Center</h1><p>AI proposes. Authorized humans approve crisis and allocation decisions.</p><div class="demo demo-admin"><b>🎬 Demo Admin Login</b><br>Username / Email: <code>{{ demo_admin_email }}</code> &nbsp; Password: <code>{{ demo_admin_password }}</code></div></div><div class="toolbar"><div class="admin-notification-wrap"><button class="admin-notification-btn" id="adminNotificationBtn" type="button">🔔 Notifications <span id="adminBellCount" class="bell-count">0</span></button><div id="adminNotificationPanel" class="admin-notification-panel" hidden><h3>Command Center Notifications</h3><div id="adminNotificationList"><div class="empty">Loading…</div></div><div class="admin-notice-actions"><button class="ghost tiny" type="button" onclick="clearAdminNotificationBadge()">Mark viewed</button></div></div></div><button onclick="replan()" class="red">Run Active Plan</button><button onclick="resetDemo()" class="ghost">Reset Demo</button></div></div>
+<section class="stats"><div class="stat danger"><b id="criticalCount">{{ stats.critical }}</b><span>Critical active</span></div><div class="stat warning"><b id="highCount">{{ stats.high }}</b><span>High active</span></div><div class="stat"><b id="availableCount">{{ stats.available }}</b><span>Resources available</span></div><div class="stat"><b id="pendingCount">{{ stats.incident_approvals + stats.approvals }}</b><span>Human decisions pending</span><small id="liveUpdated" class="live-refresh">Live sync starting…</small></div></section>
+
+<section class="card approval-center" id="crisis-approval"><div class="section-title-row"><div><span class="eyebrow">STEP 01 · AUTHORIZATION</span><h2>🛡️ Crisis Approval Center</h2><p>Every new public crisis is reviewed by an authorized human before hospitals are contacted.</p></div><span class="info-chip">{{ stats.incident_approvals }} pending</span></div>
+{% for i in incident_approvals %}<div class="approval approval-critical"><div><b>#{{i.id}} {{i.title}}</b><span><span class="badge {{i.severity|lower}}">{{i.severity}}</span> · {{i.affected_people}} people · {{i.location_text}}</span><small>AI requirement: {{i.required_resources}}</small></div><div class="actions"><button class="green tiny" onclick="approveIncident({{i.id}})">✓ Approve Crisis</button><button class="red tiny" onclick="rejectIncident({{i.id}})">✕ Reject Crisis</button></div></div>{% else %}<div class="empty">No crisis decisions are waiting.</div>{% endfor %}</section>
+
+<section class="grid two">
+<section class="card"><h2>Active Incidents</h2><div class="tablewrap"><table><tr><th>Incident</th><th>Severity</th><th>People</th><th>Location</th><th>Workflow</th></tr>{% for i in incidents if i.human_decision != 'REJECTED' %}<tr data-incident-id="{{i.id}}"><td><b>{{ i.title }}</b><small>#{{ i.id }} · Human: {{i.human_decision}}</small></td><td><span class="badge {{ i.severity|lower }}">{{ i.severity }}</span></td><td>{{ i.affected_people }}</td><td>{{ i.location_text }}<small>{{ i.latitude }}, {{ i.longitude }}</small></td><td><span class="state">{{ i.status.replace('_',' ') }}</span>{% if i.human_decision=='APPROVED' %}<button class="tiny" onclick="workflow({{i.id}})">Run AI Coordination</button>{% else %}<span class="state">Waiting authorization</span>{% endif %}</td></tr>{% endfor %}</table></div></section>
+<section class="card" id="allocation-approval"><div class="section-title-row"><div><span class="eyebrow">STEP 04 · HUMAN CONTROL</span><h2>👤 Allocation Approval / Rejection</h2><p>AI allocation proposals remain pending until the authorizer accepts or rejects them.</p></div><span class="info-chip">{{stats.approvals}} pending</span></div>{% for a in approvals %}<div class="approval"><div><b>{{ a.title }}</b><span>{{ a.label }} · {{ a.resource_type }} · {{ a.hospital_name }}</span><small>{{ a.reason }}</small></div><div class="actions"><button class="green tiny" onclick="approve({{a.id}})">✓ Approve</button><button class="red tiny" onclick="rejectAllocation({{a.id}})">✕ Reject</button></div></div>{% else %}<div class="empty">No allocation proposals waiting for human approval.</div>{% endfor %}</section>
+</section>
+
+<section class="card" id="hospital-responses"><div class="section-title-row"><div><span class="eyebrow">STEP 02 · HOSPITAL CONFIRMATION</span><h2>🏥 Hospital Resource Responses</h2><p>After a crisis is approved, nearby hospitals receive the AI requirement and confirm what they can actually provide.</p></div><span class="info-chip">AI waits for confirmed resources</span></div><div class="tablewrap"><table><tr><th>Incident</th><th>Hospital</th><th>Priority</th><th>AI Requested</th><th>Hospital Confirmed</th><th>Next Step</th></tr>{% for q in hospital_requests %}<tr><td><b>#{{q.incident_id}} {{q.title}}</b><small>{{q.location_text}}</small></td><td>{{q.hospital_name}}<small>{{q.distance_km}} km away</small></td><td><span class="badge {{q.severity|lower}}">{{q.severity}}</span></td><td>{{q.requested_resources}}</td><td><span class="state {{q.response_status|lower}}">{{q.response_status}}</span>{% if q.response_data %}<small>Offered: {{q.response_data.get('offered_resources',{})}}</small>{% endif %}</td><td>{% if q.response_status in ['APPROVED','PARTIAL','ACKNOWLEDGED'] %}<button class="green tiny" onclick="workflow({{q.incident_id}})">🤖 Allocate confirmed resources</button>{% elif q.response_status=='CONTACTED' %}<span class="state">Waiting for hospital</span>{% elif q.response_status=='DECLINED' %}<span class="state declined">✕ Hospital declined</span>{% elif q.response_status in ['FULFILLED','COMPLETED'] %}<span class="state available">✓ Request fulfilled</span>{% else %}<span class="state">{{q.response_status}}</span>{% endif %}</td></tr>{% else %}<tr><td colspan="6"><div class="empty">No hospital requests yet. Approve a crisis first.</div></td></tr>{% endfor %}</table></div></section>
+
+<section class="card" id="hospital-allocations"><div class="section-title-row"><div><span class="eyebrow">STEP 05 · DISPATCH OWNERSHIP</span><h2>🏥 Hospital Allocation & Dispatch</h2><p>This shows exactly which hospital is taking each approved allocation, where it must go, and its current dispatch state.</p></div><span class="info-chip">{{ active_allocations|length }} active allocations</span></div>
+{% if active_allocations %}<div class="allocation-hospital-grid">{% for a in active_allocations %}<div class="hospital-allocation-card"><div class="allocation-card-head"><div><b>{{a.hospital_name}}</b><small>{{a.hospital_contact or 'Hospital contact not provided'}}</small></div><span class="state {{a.status|lower}}">{{a.status}}</span></div><div class="allocation-destination"><b>#{{a.incident_id}} {{a.title}}</b><span><span class="badge {{a.severity|lower}}">{{a.severity}}</span> · 📍 {{a.location_text}}</span><small>Destination: {{a.incident_latitude}}, {{a.incident_longitude}}</small></div><div class="allocation-resource"><strong>🚑 {{a.label}}</strong><span>{{a.resource_type}} · Resource #{{a.resource_id}}</span><small>Current resource GPS: {{a.latitude}}, {{a.longitude}}</small></div><div class="allocation-notify-state">{% if a.status=='DISPATCHED' %}✓ Hospital has a dispatch assignment{% else %}🔔 Hospital notification sent — waiting for dispatch confirmation{% endif %}</div></div>{% endfor %}</div>{% else %}<div class="empty">No approved hospital allocations yet. Approve an AI allocation proposal to see the receiving hospital here.</div>{% endif %}</section>
+
+<section class="card active-plan-card" id="active-plan"><div class="section-title-row"><div><span class="eyebrow">STEP 03 · AI PLANNING</span><h2>🤖 Active Response Plan</h2><p>Only the latest plan is shown here so the current emergency stays in focus. Older plans remain in the database for audit history.</p></div>{% if plans %}<span class="plan-live">● PLAN v{{plans[0].version}} · ACTIVE</span>{% endif %}</div>{% if plans %}<div class="active-plan-grid"><div><small>PLAN STATUS</small><b>{{plans[0].status}}</b></div><div><small>CREATED</small><b>{{plans[0].created_at}}</b></div><div><small>TRIGGER</small><b id="planTrigger">Loading…</b></div></div><div id="replanSummary" class="plan-summary">Loading current plan…</div><details class="plan-technical"><summary>View plan technical details</summary><pre id="replanDetails"></pre></details>{% else %}<div class="empty">No active plan yet. Approve a crisis, collect hospital responses, then run AI allocation/replanning.</div>{% endif %}</section>
+
+<section class="card" id="resources"><h2>🚑 Resource Availability</h2><div class="tablewrap"><table><tr><th>Hospital</th><th>Resource</th><th>State</th><th>Coordinates</th><th>Updated</th></tr>{% for r in resources %}<tr><td>{{r.hospital_name}}</td><td>{{r.label}} · {{r.resource_type}}</td><td><span class="state {{r.state|lower}}">{{r.state}}</span></td><td>{{r.latitude}}, {{r.longitude}}</td><td>{{r.updated_at}}</td></tr>{% endfor %}</table></div></section>
+<section class="card" id="map"><h2>🗺️ Live Coordination Map <span class="live-map-status"><i class="live-dot"></i> LIVE</span></h2><div id="crisisMap" style="height:380px;border-radius:12px;overflow:hidden"></div><small>Incident, verified-hospital and resource locations are shown for coordination.</small></section>
+
+<section class="card ai-panel"><div class="ai-panel-head"><div><span class="eyebrow">AI DECISION SUPPORT</span><h2>Allocation Flow</h2><p>Assess → identify requirements → request nearby hospitals → receive confirmed resources → AI allocate → human approve/reject → hospital notification → dispatch → user tracking.</p></div><span class="ai-chip">AI + HUMAN CONTROL</span></div><div class="ai-flow"><span>Assess</span><b>→</b><span>Request</span><b>→</b><span>Confirm</span><b>→</b><span>Allocate</span><b>→</b><span>Approve</span><b>→</b><span>Dispatch</span></div></section>
+
+<section class="card" id="audit"><div class="audit-head"><div><span class="eyebrow">SYSTEM HISTORY</span><h2>Audit Trail</h2><p>Human-readable activity history. Full technical payloads remain available when needed.</p></div><span class="audit-chip">{{ logs|length }} recent events</span></div><div class="audit-list">{% for l in logs %}<article class="audit-item" data-action="{{ l.action|e }}" data-entity="{{ l.entity_type|e }}" data-entity-id="{{ l.entity_id or '' }}" data-details="{{ l.details_json|e }}"><div class="audit-icon">{{ '↻' if l.action in ['PLAN_REPLANNED','DYNAMIC_REPLANNING'] else ('✓' if 'APPROVED' in l.action else ('⚠' if 'SHORTAGE' in l.action or 'REJECTED' in l.action else '•')) }}</div><div class="audit-main"><div class="audit-top"><div><span class="audit-action">{{ l.action.replace('_',' ') }}</span><span class="audit-entity">{{ l.entity_type }}{% if l.entity_id %} #{{ l.entity_id }}{% endif %}</span></div><time>{{ l.created_at }}</time></div><div class="audit-summary">Loading event summary…</div><div class="audit-meta"></div><details class="audit-details"><summary>View technical details</summary><pre></pre></details></div></article>{% else %}<div class="empty">No audit events yet.</div>{% endfor %}</div></section>
+</main></div><pre id="adminOut"></pre>
+{% endblock %}
+{% block scripts %}
+<script>
+const adminSidebar=document.getElementById("adminSidebar"), adminSidebarToggle=document.getElementById("adminSidebarToggle"), adminSidebarBackdrop=document.getElementById("adminSidebarBackdrop");
+function closeAdminSidebar(){adminSidebar?.classList.remove("open");adminSidebarBackdrop?.classList.remove("show");}
+adminSidebarToggle?.addEventListener("click",()=>{adminSidebar.classList.toggle("open");adminSidebarBackdrop.classList.toggle("show");});
+adminSidebarBackdrop?.addEventListener("click",closeAdminSidebar);
+adminSidebar?.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{if(window.innerWidth<900)closeAdminSidebar();}));
+</script>
+<script>async function api(url,method='GET',body=null){const o={method,headers:{'X-CSRF-Token':window.CSRF_TOKEN}};if(body){o.headers['Content-Type']='application/json';o.body=JSON.stringify(body)}const r=await fetch(url,o);const j=await r.json();document.getElementById('adminOut').textContent=JSON.stringify(j,null,2);return r}
+async function workflow(id){await api('/api/agents/run','POST',{agent:'workflow',incident_id:id});location.reload()}
+async function approveIncident(id){if(!confirm('Approve this crisis and send its resource requirements to nearby hospitals?'))return;await api('/api/incidents/'+id+'/approve','POST');location.reload()}
+async function rejectIncident(id){const reason=prompt('Reason for rejecting this crisis (required):');if(!reason)return;await api('/api/incidents/'+id+'/reject','POST',{reason});location.reload()}
+async function approve(id){if(!confirm('Confirm human approval for this allocation?'))return;await api('/api/allocations/'+id+'/approve','POST');location.reload()}
+async function rejectAllocation(id){const reason=prompt('Reason for rejection (required):');if(!reason)return;await api('/api/allocations/'+id+'/reject','POST',{reason});location.reload()}
+async function replan(){await api('/api/replan','POST');setTimeout(()=>location.reload(),600)}
+async function loadPendingHospitals(){const r=await fetch('/api/hospitals/pending');const data=await r.json();const box=document.getElementById('pendingHospitals');if(!data.length){box.innerHTML='<div class=\"empty\">No pending hospital registrations.</div>';return;}box.innerHTML=data.map(h=>`<div class=\"approval\"><div><b>${h.name}</b><span>${h.email} · ${h.contact}</span><small>${h.location||''} · ${h.latitude}, ${h.longitude}</small></div><div class=\"actions\"><button class=\"green tiny\" onclick=\"verifyHospital(${h.id})\">Verify</button><button class=\"red tiny\" onclick=\"rejectHospital(${h.id})\">Reject</button></div></div>`).join('')}
+async function verifyHospital(id){if(!confirm('Verify this hospital and enable its login?'))return;await api('/api/hospitals/'+id+'/verify','POST');location.reload()}
+async function rejectHospital(id){if(!confirm('Reject this hospital registration?'))return;await api('/api/hospitals/'+id+'/reject','POST');location.reload()}
+let adminMap=null,incidentLayer=null,hospitalLayer=null,resourceLayer=null;
+function initMap(){if(typeof L==='undefined'||!document.getElementById('crisisMap'))return;adminMap=L.map('crisisMap').setView([12.9716,77.5946],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(adminMap);incidentLayer=L.layerGroup().addTo(adminMap);hospitalLayer=L.layerGroup().addTo(adminMap);resourceLayer=L.layerGroup().addTo(adminMap);refreshLiveMap();setInterval(refreshLiveMap,3000);}
+function mapPopup(t,x){if(t==='incident')return '<b>Incident #'+x.id+'</b><br>'+escapeHtml(x.title||'Emergency')+'<br>'+x.severity+' · '+x.status+'<br>'+escapeHtml(x.location_text||'');if(t==='hospital')return '<b>'+escapeHtml(x.name)+'</b><br>Verified hospital<br>'+escapeHtml(x.location||'');return '<b>'+escapeHtml(x.label||('Resource #'+x.id))+'</b><br>'+x.resource_type+' · '+x.state+'<br>Hospital: '+escapeHtml(x.hospital_name||'');}
+async function refreshLiveMap(){try{const r=await fetch('/api/admin/live-map',{cache:'no-store'});if(!r.ok)return;const d=await r.json();incidentLayer.clearLayers();hospitalLayer.clearLayers();resourceLayer.clearLayers();(d.incidents||[]).forEach(i=>{if(i.latitude&&i.longitude)L.marker([i.latitude,i.longitude]).addTo(incidentLayer).bindPopup(mapPopup('incident',i));});(d.hospitals||[]).forEach(h=>{if(h.latitude&&h.longitude)L.circleMarker([h.latitude,h.longitude],{radius:8}).addTo(hospitalLayer).bindPopup(mapPopup('hospital',h));});(d.resources||[]).forEach(r=>{if(r.latitude&&r.longitude)L.circleMarker([r.latitude,r.longitude],{radius:5}).addTo(resourceLayer).bindPopup(mapPopup('resource',r));});}catch(e){}}
+initMap();
+loadPendingHospitals();
+async function loadReplanSummary(){
+  try{
+    const r=await fetch('/api/plans/current'); const j=await r.json();
+    const box=document.getElementById('replanSummary');
+    if(!j.plan){box.textContent='No response plan has been generated yet.';return;}
+    const e=typeof j.plan.explanation==='string'?JSON.parse(j.plan.explanation||'{}'):j.plan.explanation;
+    box.innerHTML='<div class=\"plan-summary-title\">Latest AI response plan is in focus</div><div class=\"plan-summary-grid\"><span><small>Status</small><b>'+escapeHtml(j.plan.status||'PROPOSED')+'</b></span><span><small>Version</small><b>v'+escapeHtml(j.plan.version)+'</b></span><span><small>Trigger</small><b>'+escapeHtml(e.trigger||'—')+'</b></span><span><small>Human review</small><b>'+escapeHtml((e.human_review||[]).length?'Required':'Not flagged')+'</b></span></div><p>'+escapeHtml(e.summary||'AI plan generated from the latest verified resource state.')+'</p>';
+    const trigger=document.getElementById('planTrigger'); if(trigger) trigger.textContent=e.trigger||'—';
+    document.getElementById('replanDetails').textContent=JSON.stringify(j,null,2);
+  }catch(e){}
+}
+loadReplanSummary();
+async function resetDemo(){if(!confirm('Reset demo state?'))return;await api('/api/demo/reset','POST');location.reload()}
+function notificationIcon(a){if(a.includes('REJECTED')||a.includes('DECLINED'))return '❌';if(a.includes('APPROVED')||a.includes('ACCEPTED'))return '✅';if(a.includes('COMPLETED'))return '🏁';if(a.includes('LOCATION'))return '📍';if(a.includes('SHORTAGE'))return '⚠️';if(a.includes('SUBMITTED'))return '🚨';return '🔔';}
+function notificationTarget(n){const a=String(n.action||'');if(a.includes('CRISIS')||a.includes('INCIDENT'))return '#crisis-approval';if(a.includes('HOSPITAL_REQUEST'))return '#hospital-responses';if(a.includes('ALLOCATION'))return a.includes('APPROVED')||a.includes('REJECTED') ? '#hospital-allocations' : '#allocation-approval';if(a.includes('RESOURCE_LOCATION'))return '#map';if(a.includes('RESOURCE')||a.includes('SHORTAGE'))return '#resources';if(a.includes('COMPLETED'))return '#hospital-allocations';if(a.includes('REPLANNING'))return '#active-plan';return '#overview';}
+window.adminNotificationMap={};
+function openAdminNotification(id){const n=window.adminNotificationMap[id];if(!n)return;const target=notificationTarget(n);if(adminNotificationPanel)adminNotificationPanel.hidden=true;const el=document.querySelector(target);if(el){el.scrollIntoView({behavior:'smooth',block:'start'});el.classList.add('notification-focus');setTimeout(()=>el.classList.remove('notification-focus'),1800);}else{location.hash=target;}}
+function clearAdminNotificationBadge(){localStorage.setItem('cc_admin_notice_seen_ids',JSON.stringify(window.adminNotificationIds||[]));const c=document.getElementById('adminBellCount');if(c)c.textContent='0';}
+async function refreshAdminNotifications(){try{const r=await fetch('/api/admin/notifications',{cache:'no-store'});if(!r.ok)return;const d=await r.json(),list=d.notifications||[];window.adminNotificationIds=list.map(n=>n.id);window.adminNotificationMap={};list.forEach(n=>window.adminNotificationMap[n.id]=n);const seen=JSON.parse(localStorage.getItem('cc_admin_notice_seen_ids')||'[]');const unread=list.filter(n=>!seen.includes(n.id)).length;const c=document.getElementById('adminBellCount');if(c)c.textContent=unread>99?'99+':String(unread);const box=document.getElementById('adminNotificationList');if(box)box.innerHTML=list.length?list.map(n=>`<button type="button" class="admin-notice admin-notice-click" onclick="openAdminNotification(${Number(n.id)})"><b>${notificationIcon(n.action)} ${escapeHtml(n.label)}</b><span>${escapeHtml(n.entity_type||'SYSTEM')}${n.entity_id?' #'+n.entity_id:''}</span><small>${escapeHtml(n.created_at||'')} · Click to open</small></button>`).join(''):'<div class="empty">No recent notifications.</div>';}catch(e){}}
+const adminNotificationBtn=document.getElementById('adminNotificationBtn'),adminNotificationPanel=document.getElementById('adminNotificationPanel');adminNotificationBtn?.addEventListener('click',()=>{adminNotificationPanel.hidden=!adminNotificationPanel.hidden;if(!adminNotificationPanel.hidden)refreshAdminNotifications();});document.addEventListener('click',e=>{if(adminNotificationPanel&&!adminNotificationPanel.hidden&&!e.target.closest('.admin-notification-wrap'))adminNotificationPanel.hidden=true;});refreshAdminNotifications();setInterval(refreshAdminNotifications,3000);
+
+function escapeHtml(value){return String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function auditParse(raw){try{return JSON.parse(raw||'{}')}catch(e){return {raw:raw||''}}}
+function auditPick(obj,...keys){for(const k of keys){if(obj && obj[k]!==undefined && obj[k]!==null)return obj[k]}return null}
+function auditArray(v){return Array.isArray(v)?v:[]}
+function resourceCounts(result){
+  const counts={};
+  for(const plan of auditArray(result?.plans)){
+    for(const r of auditArray(plan?.selected_resources)){
+      const t=r.resource_type||'RESOURCE'; counts[t]=(counts[t]||0)+1;
+    }
+  }
+  return counts;
+}
+function auditSummary(action,data){
+  const result=data?.result||data;
+  if(action==='PLAN_REPLANNED' || action==='DYNAMIC_REPLANNING'){
+    const plans=auditArray(result?.plans);
+    const first=plans[0]||{};
+    const incident=first.incident_title||first.title||first.incident||'Incident plan';
+    const severity=first.severity||'—';
+    const priority=first.priority_score ?? first.priority ?? '—';
+    const trigger=data?.trigger||result?.trigger||'—';
+    const available=result?.available_pool_after_plan||{};
+    const shortages=auditArray(result?.shortages);
+    const realloc=auditArray(result?.reallocation_candidates||result?.reallocation_proposals);
+    const counts=resourceCounts(result);
+    const resources=Object.entries(counts).map(([k,v])=>`${v} ${k.replaceAll('_',' ')}`).join(' · ') || 'No resources selected';
+    return `<div class=\"audit-summary-title\">AI replanning completed <span class=\"audit-status-dot\"></span></div><div class=\"audit-summary-grid\"><span><small>Trigger</small><b>${escapeHtml(trigger)}</b></span><span><small>Incident</small><b>${escapeHtml(incident)}</b></span><span><small>Severity</small><b class=\"sev-${escapeHtml(String(severity).toLowerCase())}\">${escapeHtml(severity)}</b></span><span><small>Priority</small><b>${escapeHtml(priority)}</b></span></div><div class=\"audit-resource-line\"><strong>Allocated:</strong> ${escapeHtml(resources)} <span class=\"audit-count\">${plans.length} plan${plans.length===1?'':'s'}</span></div><div class=\"audit-badges\"><span>Available after plan: ${escapeHtml(JSON.stringify(available))}</span>${shortages.length?`<span class=\"warn\">${shortages.length} shortage${shortages.length===1?'':'s'}</span>`:''}${realloc.length?`<span class=\"review\">${realloc.length} reallocation candidate${realloc.length===1?'':'s'} · human review</span>`:'<span class=\"ok\">No reallocation required</span>'}</div>`;
+  }
+  if(action==='ALLOCATION_PROPOSED'){
+    const ids=auditArray(data?.resource_ids); return `<div class=\"audit-summary-title\">AI allocation proposal created</div><div class=\"audit-resource-line\"><strong>Resources:</strong> ${ids.length?ids.map(id=>`#${escapeHtml(id)}`).join(', '):'None'} <span class=\"audit-count review\">Human approval required</span></div>`;
+  }
+  if(action==='ALLOCATION_APPROVED') return `<div class=\"audit-summary-title\">Allocation approved by human operator</div>`;
+  if(action==='ALLOCATION_REJECTED') return `<div class=\"audit-summary-title\">Allocation proposal rejected</div><div class=\"audit-resource-line\"><strong>Reason:</strong> ${escapeHtml(data?.reason||'Reason recorded in technical details.')}</div>`;
+  if(action==='ALLOCATION_SHORTAGE') return `<div class=\"audit-summary-title\">Resource shortage detected</div><div class=\"audit-resource-line\">The requested resources were not fully available. Replanning can evaluate alternatives.</div>`;
+  if(action==='CRISIS_SUBMITTED') return `<div class=\"audit-summary-title\">Emergency incident submitted</div><div class=\"audit-resource-line\"><strong>${escapeHtml(data?.title||'Incident')}</strong> · ${escapeHtml(data?.source||'SYSTEM')}</div>`;
+  const keys=Object.keys(data||{}).filter(k=>!['result','plans'].includes(k));
+  const bits=keys.slice(0,4).map(k=>`${k.replaceAll('_',' ')}: ${typeof data[k]==='object'?JSON.stringify(data[k]):data[k]}`);
+  return `<div class=\"audit-summary-title\">${escapeHtml(action.replaceAll('_',' '))}</div>${bits.length?`<div class=\"audit-resource-line\">${escapeHtml(bits.join(' · '))}</div>`:''}`;
+}
+function renderAuditTrail(){
+  document.querySelectorAll('.audit-item').forEach(item=>{
+    const data=auditParse(item.dataset.details); const action=item.dataset.action||'';
+    item.querySelector('.audit-summary').innerHTML=auditSummary(action,data);
+    const meta=item.querySelector('.audit-meta');
+    const result=data?.result||data;
+    const notes=[];
+    if(result?.ai_method) notes.push('AI method: '+result.ai_method);
+    if(result?.human_approval_required || action.includes('PROPOSED')) notes.push('Human approval required');
+    if(result?.explanation && typeof result.explanation==='string') notes.push(result.explanation);
+    meta.textContent=notes.join(' · ');
+    const pre=item.querySelector('.audit-details pre');
+    pre.textContent=JSON.stringify(data,null,2);
+  });
+}
+renderAuditTrail();
+</script>
+<script>
+async function refreshAdminLive(){
+  try{
+    const r=await fetch('/api/admin/live-summary',{cache:'no-store'});
+    if(!r.ok)return;
+    const d=await r.json();
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v};
+    set('criticalCount',d.critical);set('highCount',d.high);set('availableCount',d.available);set('pendingCount',d.pending);
+    const stamp=document.getElementById('liveUpdated');if(stamp)stamp.textContent='● Live · '+new Date().toLocaleTimeString();
+    (d.resolved_ids||[]).forEach(id=>{const row=document.querySelector('tr[data-incident-id="'+id+'"]');if(row)row.remove();});
+    (d.active_statuses||[]).forEach(x=>{const row=document.querySelector('tr[data-incident-id="'+x.id+'"]');if(row){const states=row.querySelectorAll('.state');const last=states[states.length-1];if(last)last.textContent=(x.status||'').replaceAll('_',' ');}});
+  }catch(e){}
+}
+refreshAdminLive();setInterval(refreshAdminLive,3000);
+</script>{% endblock %}
